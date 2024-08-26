@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>משחק קריאה בעברית</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f8ff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        #game-container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            max-width: 600px;
+            width: 100%;
+        }
+        h1, h2 {
+            color: #4a4a4a;
+            text-align: center;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        #error-message {
+            color: red;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1>משחק קריאה בעברית</h1>
+        <div id="error-message"></div>
+        <div id="start-screen" style="display: none;">
+            <button onclick="startGame()">התחל משחק</button>
+        </div>
+        <div id="level-selection" style="display: none;">
+            <h2>בחר רמת קושי:</h2>
+            <button onclick="selectLevel(1)">רמה 1</button>
+            <button onclick="selectLevel(2)">רמה 2</button>
+            <button onclick="selectLevel(3)">רמה 3</button>
+        </div>
+        <div id="game-screen" style="display: none;">
+            <h2 id="story-title"></h2>
+            <div id="story"></div>
+            <button onclick="readStory()">הקרא את הסיפור</button>
+            <div id="questions"></div>
+            <button onclick="checkAnswers()">בדוק תשובות</button>
+            <button onclick="nextStory()">לסיפור הבא</button>
+        </div>
+    </div>
+
+    <script>
+        let stories;
+        let currentLevel;
+        let currentStoryIndex;
+        let currentStory;
+
+        function showError(message) {
+            document.getElementById('error-message').textContent = message;
+        }
+
+        // טעינת הסיפורים מקובץ JSON
+        fetch('stories.json')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                stories = data;
+                document.getElementById('start-screen').style.display = 'block';
+                showError(''); // Clear any error message
+            })
+            .catch(error => {
+                console.error('Error loading stories:', error);
+                showError(`שגיאה בטעינת הסיפורים: ${error.message}. אנא ודא שקובץ stories.json קיים ותקין.`);
+            });
+
+        function startGame() {
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('level-selection').style.display = 'block';
+        }
+
+        function selectLevel(level) {
+            if (!stories) {
+                showError('הסיפורים עדיין בטעינה. אנא המתן מספר שניות ונסה שוב.');
+                return;
+            }
+            currentLevel = level;
+            currentStoryIndex = 0;
+            loadStory();
+            document.getElementById('level-selection').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'block';
+        }
+
+        function loadStory() {
+            currentStory = stories[`level${currentLevel}`][currentStoryIndex];
+            document.getElementById('story-title').textContent = currentStory.title;
+            document.getElementById('story').textContent = currentStory.content;
+            
+            const questionsContainer = document.getElementById('questions');
+            questionsContainer.innerHTML = '';
+            currentStory.questions.forEach((question, index) => {
+                const questionElement = document.createElement('div');
+                questionElement.className = 'question';
+                questionElement.innerHTML = `
+                    <p>${question.text}</p>
+                    ${question.options.map((option, optionIndex) => `
+                        <label>
+                            <input type="radio" name="question${index}" value="${optionIndex}">
+                            ${option}
+                        </label>
+                    `).join('')}
+                    <div class="feedback"></div>
+                `;
+                questionsContainer.appendChild(questionElement);
+            });
+        }
+
+        function checkAnswers() {
+            const questions = document.querySelectorAll('.question');
+            let allCorrect = true;
+            questions.forEach((questionElement, index) => {
+                const selectedAnswer = questionElement.querySelector('input:checked');
+                const feedbackElement = questionElement.querySelector('.feedback');
+                if (selectedAnswer) {
+                    const isCorrect = parseInt(selectedAnswer.value) === currentStory.questions[index].correctAnswer;
+                    feedbackElement.textContent = isCorrect ? 'נכון!' : 'לא נכון, נסה שוב.';
+                    feedbackElement.className = `feedback ${isCorrect ? 'correct' : 'incorrect'}`;
+                    if (!isCorrect) allCorrect = false;
+                } else {
+                    feedbackElement.textContent = 'נא לבחור תשובה.';
+                    feedbackElement.className = 'feedback';
+                    allCorrect = false;
+                }
+            });
+            if (allCorrect) {
+                alert('כל הכבוד! ענית נכון על כל השאלות!');
+            }
+        }
+
+        function nextStory() {
+            currentStoryIndex++;
+            if (currentStoryIndex >= stories[`level${currentLevel}`].length) {
+                alert('סיימת את כל הסיפורים ברמה זו!');
+                document.getElementById('game-screen').style.display = 'none';
+                document.getElementById('level-selection').style.display = 'block';
+            } else {
+                loadStory();
+            }
+        }
+
+        function readStory() {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(currentStory.content);
+                utterance.lang = 'he-IL';
+                speechSynthesis.speak(utterance);
+            } else {
+                alert('מצטערים, הדפדפן שלך אינו תומך בהקראה.');
+            }
+        }
+    </script>
+</body>
+</html>
